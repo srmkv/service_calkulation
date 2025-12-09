@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Конструктор калькуляторов — SaaS для бизнеса</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --brand-main: #4f46e5;
+      --brand-main-soft: #eef2ff;
+      --brand-dark: #111827;
+      --brand-muted: #6b7280;
+      --bg-page: #f3f4f6;
+      --card-bg: #ffffff;
+      --border-subtle: #e5e7eb;
+      --danger: #ef4444;
+      --radius-lg: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #e5edff 0, #f9fafb 45%, #e5e7eb 100%);
+      color: var(--brand-dark);
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    .page { min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* Header */
+
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(16px);
+      background: linear-gradient(to bottom, rgba(249, 250, 251, 0.9), rgba(249, 250, 251, 0.7));
+      border-bottom: 1px solid rgba(229, 231, 235, 0.8);
+    }
+    .header-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      border-radius: 12px;
+      background: conic-gradient(from 140deg, #4f46e5, #22c55e, #0ea5e9, #f97316, #4f46e5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 700;
+      box-shadow: 0 8px 20px rgba(79, 70, 229, 0.45);
+    }
+    .logo-text-main { font-weight: 600; font-size: 16px; }
+    .logo-text-sub { font-size: 11px; color: var(--brand-muted); }
+    .logo-text-wrap { display: flex; flex-direction: column; }
+
+    .nav {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      font-size: 13px;
+    }
+    .nav-link {
+      padding: 4px 8px;
+      border-radius: 999px;
+      color: var(--brand-muted);
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+    .nav-link:hover {
+      background: rgba(79, 70, 229, 0.06);
+      color: var(--brand-dark);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      border-radius: 999px;
+      padding: 7px 14px;
+      border: 1px solid transparent;
+      font-size: 13px;
+      cursor: pointer;
+      background: transparent;
+      color: var(--brand-dark);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+    }
+    .btn span.icon { font-size: 14px; }
+    .btn-ghost {
+      border-color: rgba(148, 163, 184, 0.6);
+      background: #ffffff;
+    }
+    .btn-ghost:hover {
+      background: #f3f4f6;
+      transform: translateY(-1px);
+    }
+    .btn-primary {
+      border-color: var(--brand-main);
+      background: var(--brand-main);
+      color: #ffffff;
+      box-shadow: 0 10px 25px rgba(79, 70, 229, 0.4);
+    }
+    .btn-primary:hover {
+      background: #4338ca;
+      border-color: #4338ca;
+      transform: translateY(-1px);
+      box-shadow: 0 16px 35px rgba(79, 70, 229, 0.5);
+    }
+
+    @media (max-width: 768px) {
+      .nav { display: none; }
+    }
+
+    /* Main layout */
+
+    .main { flex: 1; }
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px 16px 40px;
+    }
+
+    /* Hero */
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+      gap: 24px;
+      align-items: center;
+      margin-top: 12px;
+      margin-bottom: 40px;
+    }
+    @media (max-width: 900px) {
+      .hero { grid-template-columns: minmax(0, 1fr); }
+    }
+
+    .hero-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px 3px 4px;
+      border-radius: 999px;
+      background: rgba(79, 70, 229, 0.06);
+      color: var(--brand-main);
+      font-size: 11px;
+      margin-bottom: 10px;
+    }
+    .hero-kicker-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: #22c55e;
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.28);
+    }
+
+    .hero-title {
+      font-size: clamp(28px, 3.2vw, 34px);
+      line-height: 1.1;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .hero-highlight {
+      background: linear-gradient(to right, #4f46e5, #0ea5e9);
+      -webkit-background-clip: text;
+      color: transparent;
+    }
+    .hero-subtitle {
+      font-size: 14px;
+      color: var(--brand-muted);
+      max-width: 420px;
+      margin-bottom: 16px;
+    }
+    .hero-bullets {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 6px;
+      margin-bottom: 18px;
+      font-size: 13px;
+      color: var(--brand-muted);
+    }
+    .hero-bullet {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .hero-bullet-icon {
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: #dcfce7;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      color: #15803d;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .hero-note {
+      font-size: 11px;
+      color: var(--brand-muted);
+    }
+
+    .hero-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 16px;
+      font-size: 12px;
+    }
+    .hero-metric { display: flex; flex-direction: column; gap: 2px; }
+    .hero-metric-value { font-weight: 600; font-size: 14px; }
+    .hero-metric-label { color: var(--brand-muted); }
+
+    .hero-visual {
+      position: relative;
+      border-radius: 24px;
+      background: radial-gradient(circle at top left, #eef2ff 0, #f9fafb 52%, #e5e7eb 100%);
+      box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24);
+      padding: 16px 16px 18px;
+      overflow: hidden;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+    }
+    .hero-badge-floating {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.78);
+      color: #e5e7eb;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 2;
+    }
+    .hero-badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #22c55e;
+    }
+
+    .hero-screen {
+      border-radius: 16px;
+      background: #020617;
+      color: #e5e7eb;
+      padding: 10px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 14px 30px rgba(15, 23, 42, 0.7);
+      font-size: 11px;
+    }
+    .hero-screen-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .hero-screen-dots { display: flex; gap: 4px; }
+    .hero-screen-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #475569;
+    }
+    .hero-screen-title { font-size: 11px; color: #9ca3af; }
+
+    .hero-calcs-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.95fr);
+      gap: 10px;
+    }
+    .hero-calc-card {
+      border-radius: 12px;
+      background: #020617;
+      border: 1px solid #1f2937;
+      padding: 10px;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-calc-title { font-size: 11px; font-weight: 500; margin-bottom: 6px; }
+    .hero-calc-sub { font-size: 10px; color: #9ca3af; margin-bottom: 8px; }
+    .hero-calc-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+    .hero-tag {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #1f2937;
+    }
+
+    .hero-calc-preview {
+      position: relative;
+      border-radius: 10px;
+      background: radial-gradient(circle at top, rgba(96, 165, 250, 0.2), transparent 56%), #020617;
+      border: 1px solid #1f2937;
+      padding: 8px;
+      min-height: 90px;
+      overflow: hidden;
+    }
+    .hero-calc-preview-layer {
+      position: absolute;
+      inset: 0;
+      border-radius: 10px;
+      opacity: 0.25;
+      mix-blend-mode: screen;
+    }
+    .hero-layer-1 {
+      background: radial-gradient(circle at 20% 50%, rgba(59, 130, 246, 0.9), transparent 55%);
+    }
+    .hero-layer-2 {
+      background: radial-gradient(circle at 40% 40%, rgba(249, 115, 22, 0.8), transparent 58%);
+    }
+    .hero-layer-3 {
+      background: radial-gradient(circle at 75% 60%, rgba(129, 140, 248, 0.9), transparent 60%);
+    }
+    .hero-calc-preview-overlay {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      font-size: 10px;
+    }
+
+    .hero-mini-options { display: grid; gap: 4px; }
+    .hero-mini-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
+    }
+    .hero-mini-option-label { color: #d1d5db; }
+    .hero-mini-option-price { color: #a5b4fc; }
+    .hero-mini-total { font-size: 10px; margin-top: 4px; color: #e5e7eb; }
+
+    .hero-calc-small {
+      border-radius: 10px;
+      background: #020617;
+      border: 1px solid #1f2937;
+      padding: 8px;
+      font-size: 10px;
+    }
+    .hero-calc-line {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    .hero-calc-label { color: #9ca3af; }
+    .hero-calc-value { color: #e5e7eb; }
+
+    /* Sections */
+
+    .section { margin-bottom: 40px; }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .section-title { font-size: 20px; font-weight: 600; }
+    .section-subtitle {
+      font-size: 13px;
+      color: var(--brand-muted);
+      max-width: 420px;
+    }
+    .section-kicker {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 10px;
+      color: #6b7280;
+      margin-bottom: 4px;
+    }
+
+    /* Example calculators */
+
+    .calc-examples-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 1024px) {
+      .calc-examples-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 640px) {
+      .calc-examples-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .calc-card {
+      border-radius: var(--radius-lg);
+      background: var(--card-bg);
+      border: 1px solid var(--border-subtle);
+      padding: 12px;
+      box-shadow: 0 8px 22px rgba(148, 163, 184, 0.24);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+    .calc-card-tag {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: var(--brand-main-soft);
+      color: var(--brand-main);
+      width: fit-content;
+    }
+    .calc-card-title { font-size: 14px; font-weight: 600; }
+    .calc-card-desc { font-size: 12px; color: var(--brand-muted); }
+    .calc-card-meta {
+      font-size: 11px;
+      color: var(--brand-muted);
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .calc-card-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .calc-card-preview {
+      margin-top: 4px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #eef2ff, #dbeafe);
+      border: 1px solid #c7d2fe;
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+
+    /* How it works */
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 900px) {
+      .steps-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    .step-card {
+      border-radius: var(--radius-lg);
+      background: var(--card-bg);
+      border: 1px solid var(--border-subtle);
+      padding: 12px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .step-number {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      background: var(--brand-main-soft);
+      color: var(--brand-main);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .step-title { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+    .step-text { font-size: 12px; color: var(--brand-muted); }
+
+    /* Pricing */
+
+    .pricing-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 900px) {
+      .pricing-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    .price-card {
+      border-radius: var(--radius-lg);
+      background: var(--card-bg);
+      border: 1px solid var(--border-subtle);
+      padding: 14px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+    .price-card--popular {
+      border-color: #4f46e5;
+      box-shadow: 0 16px 36px rgba(79, 70, 229, 0.28);
+    }
+    .price-badge {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #4f46e5;
+      color: #eef2ff;
+    }
+    .price-name { font-size: 13px; font-weight: 600; }
+    .price-sub { font-size: 11px; color: var(--brand-muted); }
+    .price-value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .price-value span {
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--brand-muted);
+      margin-left: 4px;
+    }
+    .price-meta { font-size: 11px; color: var(--brand-muted); }
+    .price-list {
+      margin: 6px 0 8px;
+      padding-left: 16px;
+      font-size: 12px;
+      color: var(--brand-muted);
+    }
+    .price-cta { margin-top: auto; }
+
+    /* FAQ */
+
+    .faq-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      .faq-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    .faq-card {
+      border-radius: var(--radius-lg);
+      background: var(--card-bg);
+      border: 1px solid var(--border-subtle);
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .faq-q { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+    .faq-a { font-size: 12px; color: var(--brand-muted); }
+
+    /* Footer */
+
+    .footer {
+      border-top: 1px solid var(--border-subtle);
+      background: #f9fafb;
+    }
+    .footer-inner {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 10px 16px 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--brand-muted);
+    }
+    .footer-nav {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .footer-nav a { color: var(--brand-muted); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="header-inner">
+        <div class="logo">
+          <div class="logo-mark">C</div>
+          <div class="logo-text-wrap">
+            <div class="logo-text-main">CalcBuilder</div>
+            <div class="logo-text-sub">конструктор умных калькуляторов</div>
+          </div>
+        </div>
+        <nav class="nav">
+          <a href="#features" class="nav-link">Возможности</a>
+          <a href="#examples" class="nav-link">Примеры калькуляторов</a>
+          <a href="#pricing" class="nav-link">Тарифы</a>
+          <a href="#faq" class="nav-link">FAQ</a>
+        </nav>
+        <div class="header-actions">
+          <!-- Вход ведёт в личный кабинет -->
+          <a href="/app" class="btn btn-ghost">
+            <span class="icon">🔐</span>
+            Вход
+          </a>
+          <!-- Регистрация тоже ведёт в кабинет, можно дальше обрабатывать ?signup=1 в app.js -->
+          <a href="/app?signup=1" class="btn btn-primary">
+            <span class="icon">✨</span>
+            Регистрация
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="container hero">
+        <div>
+          <div class="hero-kicker">
+            <span class="hero-kicker-dot"></span>
+            Запустите калькулятор за 15 минут
+          </div>
+          <h1 class="hero-title">
+            SaaS-платформа для <span class="hero-highlight">любой логики калькуляторов</span> —
+            от доставки до послойных прицепов
+          </h1>
+          <p class="hero-subtitle">
+            Создавайте свои калькуляторы без разработчика: послойные конфигурации, выездные замеры,
+            логистика, ремонт, услуги — всё в одном личном кабинете.
+          </p>
+          <div class="hero-bullets">
+            <div class="hero-bullet">
+              <div class="hero-bullet-icon">✓</div>
+              <div>Конструктор полей, опций и изображений внутри браузера</div>
+            </div>
+            <div class="hero-bullet">
+              <div class="hero-bullet-icon">✓</div>
+              <div>Сбор заявок, аналитика по конверсии и тарифные планы для команды</div>
+            </div>
+            <div class="hero-bullet">
+              <div class="hero-bullet-icon">✓</div>
+              <div>Встраивание на сайт по ссылке или виджетом</div>
+            </div>
+          </div>
+          <div class="hero-actions">
+            <a href="/app?signup=1" class="btn btn-primary">
+              <span class="icon">🚀</span>
+              Попробовать бесплатно
+            </a>
+            <a href="/app" class="btn btn-ghost">
+              <span class="icon">👀</span>
+              Войти в личный кабинет
+            </a>
+          </div>
+          <div class="hero-note">
+            14 дней бесплатно, без привязки карты. Затем можно перейти на любой тариф.
+          </div>
+
+          <div class="hero-metrics">
+            <div class="hero-metric">
+              <div class="hero-metric-value">10+ типов калькуляторов</div>
+              <div class="hero-metric-label">послойные, расстояние, выезд, ремонт и др.</div>
+            </div>
+            <div class="hero-metric">
+              <div class="hero-metric-value">&lt; 1 дня</div>
+              <div class="hero-metric-label">от идеи до рабочего калькулятора</div>
+            </div>
+            <div class="hero-metric">
+              <div class="hero-metric-value">∞</div>
+              <div class="hero-metric-label">вариантов комбинаций опций и тарифов</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-visual">
+          <div class="hero-badge-floating">
+            <span class="hero-badge-dot"></span>
+            Онлайн-демо калькулятора
+          </div>
+          <div class="hero-screen">
+            <div class="hero-screen-header">
+              <div class="hero-screen-dots">
+                <span class="hero-screen-dot"></span>
+                <span class="hero-screen-dot"></span>
+                <span class="hero-screen-dot"></span>
+              </div>
+              <div class="hero-screen-title">Послойный прицеп + выезд замерщика</div>
+            </div>
+            <div class="hero-calcs-grid">
+              <div class="hero-calc-card">
+                <div class="hero-calc-title">Послойный калькулятор прицепа</div>
+                <div class="hero-calc-sub">
+                  Включайте опции и смотрите, как меняется конфигурация.
+                </div>
+                <div class="hero-calc-tags">
+                  <span class="hero-tag">слои</span>
+                  <span class="hero-tag">изображения</span>
+                  <span class="hero-tag">цены</span>
+                </div>
+
+                <div class="hero-calc-preview">
+                  <div class="hero-calc-preview-layer hero-layer-1"></div>
+                  <div class="hero-calc-preview-layer hero-layer-2"></div>
+                  <div class="hero-calc-preview-layer hero-layer-3"></div>
+                  <div class="hero-calc-preview-overlay">
+                    <div class="hero-mini-options">
+                      <div class="hero-mini-option">
+                        <span class="hero-mini-option-label">База</span>
+                        <span class="hero-mini-option-price">0 ₽</span>
+                      </div>
+                      <div class="hero-mini-option">
+                        <span class="hero-mini-option-label">Каркас + тент</span>
+                        <span class="hero-mini-option-price">+40 000 ₽</span>
+                      </div>
+                      <div class="hero-mini-option">
+                        <span class="hero-mini-option-label">Запаска</span>
+                        <span class="hero-mini-option-price">+4 700 ₽</span>
+                      </div>
+                      <div class="hero-mini-total">
+                        Итого: <strong>44 700 ₽</strong>
+                      </div>
+                    </div>
+                    <div style="font-size:10px; color:#9ca3af; text-align:right;">
+                      Вид: спереди<br />
+                      3 активных слоя
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="hero-calc-card hero-calc-small">
+                <div class="hero-calc-title">Калькулятор доставки</div>
+                <div class="hero-calc-line">
+                  <span class="hero-calc-label">Город → Область</span>
+                  <span class="hero-calc-value">135 км</span>
+                </div>
+                <div class="hero-calc-line">
+                  <span class="hero-calc-label">Ставка за км</span>
+                  <span class="hero-calc-value">45 ₽</span>
+                </div>
+                <div class="hero-calc-line">
+                  <span class="hero-calc-label">Погрузка/разгрузка</span>
+                  <span class="hero-calc-value">1 500 ₽</span>
+                </div>
+                <div class="hero-calc-line">
+                  <span class="hero-calc-label">Итого</span>
+                  <span class="hero-calc-value">7 575 ₽</span>
+                </div>
+                <div style="margin-top:6px; font-size:10px; color:#9ca3af;">
+                  Формула и поля полностью настраиваются в личном кабинете.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Features / Examples -->
+
+      <section id="examples" class="container section">
+        <div class="section-header">
+          <div>
+            <div class="section-kicker" id="features">Калькуляторы</div>
+            <div class="section-title">Примеры калькуляторов, которые вы можете собрать</div>
+            <div class="section-subtitle">
+              Соберите свои сценарии, начиная от простого подсчёта стоимости до сложных
+              конфигураторов с послойной графикой.
+            </div>
+          </div>
+          <div class="section-subtitle" style="font-size:12px;">
+            Все примеры ниже — это лишь пресеты. Вы можете менять поля, логику расчёта и внешний вид под
+            свою нишу.
+          </div>
+        </div>
+
+        <div class="calc-examples-grid">
+          <article class="calc-card">
+            <div class="calc-card-tag">Послойный конфигуратор</div>
+            <h3 class="calc-card-title">Прицеп, авто, шкаф — с послойными изображениями</h3>
+            <p class="calc-card-desc">
+              Базовый вид + набор опций, каждая из которых добавляет свой слой на изображение и влияет на цену.
+            </p>
+            <div class="calc-card-meta">
+              <span>🎨 слои: изображения front/rear/side</span>
+              <span>💰 опции с наценкой</span>
+            </div>
+            <div class="calc-card-preview">
+              Пример: каркас + тент, дуги, запаска, доп. освещение — всё включается чекбоксами и
+              визуально добавляется на макет.
+            </div>
+          </article>
+
+          <article class="calc-card">
+            <div class="calc-card-tag">Калькулятор доставки</div>
+            <h3 class="calc-card-title">Расчёт стоимости доставки по расстоянию</h3>
+            <p class="calc-card-desc">
+              Клиент выбирает маршрут, тип транспорта, дополнительные услуги — система сразу считает итог.
+            </p>
+            <div class="calc-card-meta">
+              <span>📍 откуда–куда</span>
+              <span>🚚 тип машины</span>
+              <span>⏱ простой, доп. услуги</span>
+            </div>
+            <div class="calc-card-preview">
+              Пример: город → склад, 1,5-тонник, погрузка, ожидание. Цена = расстояние × тариф + доп. услуги.
+            </div>
+          </article>
+
+          <article class="calc-card">
+            <div class="calc-card-tag">Выездные замеры</div>
+            <h3 class="calc-card-title">Запись замерщика / инженера на объект</h3>
+            <p class="calc-card-desc">
+              Клиент выбирает дату, адрес и тип работ, а вы получаете структурированную заявку в кабинете.
+            </p>
+            <div class="calc-card-meta">
+              <span>📅 календарь</span>
+              <span>📍 адрес</span>
+              <span>👷 тип работ</span>
+            </div>
+            <div class="calc-card-preview">
+              Пример: выезд на замер кухни/окна/ремонта с выбором города и желаемого времени.
+            </div>
+          </article>
+
+          <article class="calc-card">
+            <div class="calc-card-tag">Ремонт и услуги</div>
+            <h3 class="calc-card-title">Калькулятор ремонта или услуг</h3>
+            <p class="calc-card-desc">
+              Площадь, тип помещения, набор работ — и мгновенный предварительный расчёт для клиента.
+            </p>
+            <div class="calc-card-meta">
+              <span>📏 площадь/метраж</span>
+              <span>📦 пакеты работ</span>
+              <span>📞 заявка в CRM</span>
+            </div>
+            <div class="calc-card-preview">
+              Пример: ремонт квартиры “Эконом/Комфорт/Премиум” с возможностью доп. опций и рассчёта по метрам.
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <!-- How it works -->
+
+      <section class="container section">
+        <div class="section-header">
+          <div>
+            <div class="section-kicker">Как это работает</div>
+            <div class="section-title">От идеи до встроенного калькулятора за несколько шагов</div>
+          </div>
+        </div>
+
+        <div class="steps-grid">
+          <div class="step-card">
+            <div class="step-number">1</div>
+            <div>
+              <div class="step-title">Настроить калькулятор в личном кабинете</div>
+              <div class="step-text">
+                Выбираете тип (послойный, доставка, замер и т.п.), добавляете поля, опции, изображения и базовую цену.
+              </div>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-number">2</div>
+            <div>
+              <div class="step-title">Получить ссылку или код встраивания</div>
+              <div class="step-text">
+                Для каждого калькулятора генерируется публичная ссылка вида <code>/p/ваш_пользователь/токен</code> и виджет для сайта.
+              </div>
+            </div>
+          </div>
+
+          <div class="step-card">
+            <div class="step-number">3</div>
+            <div>
+              <div class="step-title">Собирать заявки и смотреть аналитику</div>
+              <div class="step-text">
+                Все расчёты и заявки попадают в личный кабинет. Дальше можно подключить CRM, e-mail и другие интеграции.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Pricing -->
+
+      <section id="pricing" class="container section">
+        <div class="section-header">
+          <div>
+            <div class="section-kicker">Тарифы</div>
+            <div class="section-title">Простая тарифная сетка для старта и роста</div>
+          </div>
+          <div class="section-subtitle" style="font-size:12px;">
+            Начните с теста, а затем выберите тариф под ваш объём заявок и количество калькуляторов.
+          </div>
+        </div>
+
+        <div class="pricing-grid">
+          <div class="price-card">
+            <div class="price-name">Start</div>
+            <div class="price-sub">Для небольших проектов и тестов гипотез</div>
+            <div class="price-value">
+              0 ₽ <span>/ 14 дней</span>
+            </div>
+            <div class="price-meta">Затем можно перейти на любой платный тариф.</div>
+            <ul class="price-list">
+              <li>До 2 калькуляторов</li>
+              <li>До 50 заявок в месяц</li>
+              <li>Базовая аналитика и экспорт</li>
+            </ul>
+            <div class="price-cta">
+              <a href="/app?signup=1" class="btn btn-ghost btn-sm">Зарегистрироваться</a>
+            </div>
+          </div>
+
+          <div class="price-card price-card--popular">
+            <div class="price-badge">Популярный</div>
+            <div class="price-name">Pro</div>
+            <div class="price-sub">Основной тариф для активных отделов продаж</div>
+            <div class="price-value">
+              2 900 ₽ <span>/ месяц</span>
+            </div>
+            <div class="price-meta">Оптимально для компаний с несколькими направлениями.</div>
+            <ul class="price-list">
+              <li>До 10 калькуляторов</li>
+              <li>До 1 000 заявок в месяц</li>
+              <li>Послойные калькуляторы + интеграции</li>
+            </ul>
+            <div class="price-cta">
+              <a href="/app?signup=1" class="btn btn-primary btn-sm">Перейти на Pro</a>
+            </div>
+          </div>
+
+          <div class="price-card">
+            <div class="price-name">Max</div>
+            <div class="price-sub">Для агентств, маркетплейсов и сетевых компаний</div>
+            <div class="price-value">
+              Индивидуально <span>/ по запросу</span>
+            </div>
+            <div class="price-meta">Под ваши объёмы и интеграции.</div>
+            <ul class="price-list">
+              <li>Безлимит по калькуляторам</li>
+              <li>Расширенные лимиты заявок</li>
+              <li>Подключение к вашим CRM/BI</li>
+            </ul>
+            <div class="price-cta">
+              <a href="/app" class="btn btn-ghost btn-sm">Оставить запрос</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- FAQ -->
+
+      <section id="faq" class="container section">
+        <div class="section-header">
+          <div>
+            <div class="section-kicker">FAQ</div>
+            <div class="section-title">Частые вопросы</div>
+          </div>
+        </div>
+
+        <div class="faq-grid">
+          <div>
+            <article class="faq-card">
+              <div class="faq-q">Нужен ли мне разработчик, чтобы собрать калькулятор?</div>
+              <div class="faq-a">
+                Нет. Конструктор рассчитан на менеджеров и маркетологов. Вы сами настраиваете поля, формулы,
+                опции и тексты. Если нужна кастомная интеграция — подключаете своего разработчика через API.
+              </div>
+            </article>
+
+            <article class="faq-card">
+              <div class="faq-q">Можно ли использовать послойные изображения, как в конфигураторе прицепа?</div>
+              <div class="faq-a">
+                Да. В личном кабинете вы загружаете изображения базовых видов (front/rear/side), затем
+                добавляете опции со своими слоями. Публичный калькулятор автоматически накладывает их друг на друга.
+              </div>
+            </article>
+
+            <article class="faq-card">
+              <div class="faq-q">Как передаются заявки в мой CRM или почту?</div>
+              <div class="faq-a">
+                Каждому калькулятору можно назначить интеграции: отправка заявок на e-mail, вебхуки во
+                внутренние системы или в CRM. В интерфейсе вы просто указываете адреса и ключи.
+              </div>
+            </article>
+          </div>
+          <div>
+            <article class="faq-card">
+              <div class="faq-q">Что будет после окончания тестового периода?</div>
+              <div class="faq-a">
+                Калькуляторы и данные сохраняются, но становятся неактивными. Чтобы продолжить работу, достаточно
+                выбрать тариф и оплатить. Ничего пере настраивать не нужно.
+              </div>
+            </article>
+
+            <article class="faq-card">
+              <div class="faq-q">Можно ли подключить нескольких менеджеров?</div>
+              <div class="faq-a">
+                Да. В тарифах Pro и Max доступны роли: администратор, менеджер, маркетолог. Администратор управляет
+                пользователями, тарифами и лимитами.
+              </div>
+            </article>
+
+            <article class="faq-card">
+              <div class="faq-q">У меня ниша, которой нет в примерах. Подойдёт ли сервис?</div>
+              <div class="faq-a">
+                С высокой вероятностью — да. Если ваши услуги можно описать набором полей и правил,
+                их можно собрать в калькулятор. Послойная графика, расстояние, площади, тарифные сетки —
+                всё конструируется в одном интерфейсе.
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div>© CalcBuilder, 2025. Конструктор умных калькуляторов для бизнеса.</div>
+        <div class="footer-nav">
+          <a href="#pricing">Тарифы</a>
+          <span>•</span>
+          <a href="#faq">FAQ</a>
+          <span>•</span>
+          <a href="/app">Вход</a>
+          <span>•</span>
+          <a href="/app?signup=1">Регистрация</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>
