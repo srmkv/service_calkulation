@@ -43,16 +43,9 @@ async function postJSON(path, body) {
   if (!res.ok) {
     let message = 'HTTP ' + res.status;
     try {
-      const data = await res.json();
-      if (data && data.error) {
-        message = data.error;
-      }
-    } catch (e) {
-      try {
-        const text = await res.text();
-        if (text) message = text;
-      } catch (_) {}
-    }
+      const text = await res.text();
+      if (text) message = text;
+    } catch (_) {}
     const err = new Error(message);
     err.status = res.status;
     throw err;
@@ -81,6 +74,7 @@ const CALC_TYPE_LABELS = {
   layered: 'Послойный',
   distance: 'Расчёт доставки',
   on_site: 'Выезд замерщика',
+  mortgage: 'Ипотека',
 };
 
 // popup о лимите тарифа
@@ -318,6 +312,8 @@ async function loadSection(section) {
   }
 }
 
+// --- Settings ---
+
 async function renderSettings() {
   contentEl.innerHTML = `
     <div class="card">
@@ -373,6 +369,14 @@ async function renderSettings() {
           Сервис геокодирования (поиск координат по адресу). По умолчанию используется публичный Nominatim.
         </p>
       </div>
+      <div class="field">
+        <label class="field-label">Telegram bot token</label>
+        <input type="password" id="tg-bot-token-input" placeholder="123456:ABC-DEF..." />
+        <p class="small">
+          Токен вашего Telegram-бота из @BotFather. Используется для отправки уведомлений
+          с результатами расчётов.
+        </p>
+      </div>
 
       <div class="field" style="display:flex; gap:8px; align-items:center;">
         <button class="btn primary" id="settings-save-btn" type="button">Сохранить</button>
@@ -385,6 +389,7 @@ async function renderSettings() {
 
     const osrmInput = document.getElementById('osrm-base-url-input');
     const nominatimInput = document.getElementById('nominatim-base-url-input');
+    const tgTokenInput = document.getElementById('tg-bot-token-input');
     const saveBtn = document.getElementById('settings-save-btn');
 
     if (data && data.osrmBaseUrl) {
@@ -393,29 +398,33 @@ async function renderSettings() {
     if (data && data.nominatimBaseUrl) {
       nominatimInput.value = data.nominatimBaseUrl;
     }
+    if (data && data.telegramBotToken) {
+      tgTokenInput.value = data.telegramBotToken;
+    }
 
     saveBtn.addEventListener('click', async () => {
       const osrmBaseUrl = osrmInput.value.trim();
       const nominatimBaseUrl = nominatimInput.value.trim();
-
+      const telegramBotToken = tgTokenInput.value.trim();
       try {
         saveBtn.disabled = true;
         saveBtn.textContent = 'Сохранение...';
 
-        const res = await fetch(buildApiUrl('/admin/settings'), {
+        const res2 = await fetch(buildApiUrl('/admin/settings'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             osrmBaseUrl,
             nominatimBaseUrl,
+            telegramBotToken,
           }),
         });
 
-        if (!res.ok) {
-          throw new Error('HTTP ' + res.status);
+        if (!res2.ok) {
+          throw new Error('HTTP ' + res2.status);
         }
 
-        await res.json();
+        await res2.json();
         alert('Настройки сохранены');
       } catch (err) {
         console.error(err);
@@ -445,135 +454,281 @@ async function renderBilling() {
     </div>
   `;
 
-  let data;
+  let me;
+  let plans;
+
   try {
-    data = await fetchJSON('/me');
+    [me, plans] = await Promise.all([
+      fetchJSON('/me'),
+      fetchJSON('/plans'),
+    ]);
   } catch (err) {
     console.error(err);
     contentEl.innerHTML = `
       <div class="card">
         <div class="card-title">Ошибка</div>
-        <p>Не удалось загрузить данные о текущем пользователе.</p>
+        <p>Не удалось загрузить данные о текущем пользователе или тарифах.</p>
       </div>
     `;
     return;
   }
 
-  const user = data.user;
-  const currentPlan = data.plan || null;
-  const plans = data.plans || [];
+  const user = (me && me.user) || null;
+  const currentPlan = (me && me.plan) || null;
+  const leadsUsed = typeof me.leadsUsed === 'number' ? me.leadsUsed : 0;
+  const calcsUsed = typeof me.calcsUsed === 'number' ? me.calcsUsed : 0;
+
+  plans = Array.isArray(plans) ? plans : [];
 
   const root = document.createElement('div');
 
-  const userCard = document.createElement('div');
-  userCard.className = 'card';
-  userCard.innerHTML = `
-    <div class="card-title">Ваш аккаунт</div>
-    <div class="card-subtitle small">
-      Вы работаете как <strong>${user.role === 'admin' ? 'Администратор' : 'Пользователь'}</strong> (${user.email}).
-    </div>
-    <p class="small">ID: ${user.id}</p>
-  `;
-  root.appendChild(userCard);
+  // --- карточка "Текущий тариф" ---
 
   const currentCard = document.createElement('div');
   currentCard.className = 'card';
-  if (currentPlan) {
-   const cpLeadsLimitNum =
-  typeof currentPlan.maxLeads === 'number' && currentPlan.maxLeads > 0
-    ? currentPlan.maxLeads
-    : null;
-const cpLeadsLimitText = cpLeadsLimitNum ? cpLeadsLimitNum : '∞';
-
-const cpCalcsLimitNum =
-  typeof currentPlan.maxCalcs === 'number' && currentPlan.maxCalcs > 0
-    ? currentPlan.maxCalcs
-    : (cpLeadsLimitNum ? cpLeadsLimitNum * 2 : null);
-const cpCalcsLimitText = cpCalcsLimitNum ? cpCalcsLimitNum : '∞';
-
-currentCard.innerHTML = `
-  <div class="card-title">Текущий тариф: ${currentPlan.name}</div>
-  <div class="card-subtitle">${currentPlan.description}</div>
-  <p class="plan-card-price">${currentPlan.price.toLocaleString('ru-RU')} ₽ / месяц</p>
-  <p class="plan-card-meta">
-    Калькуляторов: до ${currentPlan.maxCalculators}, заявок: до ${cpLeadsLimitText}, расчётов: до ${cpCalcsLimitText}.
-  </p>
-`;
-
-  } else {
+  if (!currentPlan) {
     currentCard.innerHTML = `
       <div class="card-title">Текущий тариф</div>
-      <div class="card-subtitle">Тариф ещё не выбран.</div>
+      <div class="card-subtitle">
+        Тариф не выбран. Обратитесь к администратору или выберите тариф из списка ниже.
+      </div>
+    `;
+  } else {
+    const leadsLimit =
+      typeof currentPlan.maxLeads === 'number' && currentPlan.maxLeads > 0
+        ? currentPlan.maxLeads
+        : null;
+    const calcsLimit =
+      typeof currentPlan.maxCalcs === 'number' && currentPlan.maxCalcs > 0
+        ? currentPlan.maxCalcs
+        : (leadsLimit ? leadsLimit * 2 : null);
+
+    const leadsLimitText = leadsLimit ? leadsLimit : '∞';
+    const calcsLimitText = calcsLimit ? calcsLimit : '∞';
+
+    const price =
+      typeof currentPlan.price === 'number'
+        ? currentPlan.price.toLocaleString('ru-RU') + ' ₽/мес'
+        : String(currentPlan.price || '');
+
+    const planActive = !user || user.planActive !== false;
+
+    currentCard.innerHTML = `
+      <div class="card-title">Ваш текущий тариф: ${currentPlan.name || currentPlan.id}</div>
+      <div class="card-subtitle">
+        ${currentPlan.description || 'Описание тарифа отсутствует.'}
+      </div>
+
+      <div class="field" style="margin-top:8px;">
+        <div class="small">
+          Стоимость: <strong>${price || 'по договорённости'}</strong>
+        </div>
+        <div class="small">
+          Калькуляторов: <strong>${currentPlan.maxCalculators}</strong>
+        </div>
+        <div class="small">
+          Лимит заявок: <strong>${leadsUsed}/${leadsLimitText}</strong>
+        </div>
+        <div class="small">
+          Лимит расчётов: <strong>${calcsUsed}/${calcsLimitText}</strong>
+        </div>
+
+        <div class="field" style="margin-top:12px;">
+          <label class="field-label">Уведомления в Telegram</label>
+          <p class="small">
+            Укажите ваш Telegram ID, чтобы получать сюда копии расчётов по калькуляторам.
+          </p>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <input type="text" id="billing-tg-chat-id" placeholder="Например, 123456789" style="max-width:220px;" />
+            <button type="button" class="btn secondary" id="billing-tg-chat-save">
+              Сохранить
+            </button>
+          </div>
+          <p class="small" style="margin-top:4px;">
+            Узнать свой ID можно через бота <code>@userinfobot</code> (команда /start).
+          </p>
+        </div>
+
+        ${
+          planActive
+            ? ''
+            : '<div class="small" style="color:#f97316;margin-top:4px;">Тариф не активен. Обратитесь к администратору или продлите подписку.</div>'
+        }
+      </div>
     `;
   }
+
   root.appendChild(currentCard);
+
+  // --- список доступных тарифов ---
 
   const plansCard = document.createElement('div');
   plansCard.className = 'card';
   plansCard.innerHTML = `
     <div class="card-title">Доступные тарифы</div>
-    <div class="plan-grid" id="plan-grid"></div>
+    <div class="card-subtitle">
+      Тарифы загружаются из БД. Здесь можно сравнить ограничения и возможности.
+      Переключение тарифа пока демонстрационное — в реальной версии будет оплата и смена плана.
+    </div>
+    <div class="plans-grid" id="plans-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px;"></div>
   `;
+
+  const grid = plansCard.querySelector('#plans-grid');
+
+  if (!plans.length) {
+    grid.innerHTML = `<p class="small">Тарифы пока не настроены. Добавьте записи в таблицу <code>plans</code> в БД.</p>`;
+  } else {
+    plans.forEach((p) => {
+      const isCurrent = currentPlan && currentPlan.id === p.id;
+
+      const price =
+        typeof p.price === 'number'
+          ? p.price.toLocaleString('ru-RU') + ' ₽/мес'
+          : String(p.price || '');
+
+      const leadsLimit =
+        typeof p.maxLeads === 'number' && p.maxLeads > 0 ? p.maxLeads : null;
+      const calcsLimit =
+        typeof p.maxCalcs === 'number' && p.maxCalcs > 0
+          ? p.maxCalcs
+          : (leadsLimit ? leadsLimit * 2 : null);
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.border = isCurrent ? '1px solid #4f46e5' : '1px solid #e5e7eb';
+      card.style.boxShadow = isCurrent
+        ? '0 0 0 1px rgba(79,70,229,0.3)'
+        : 'none';
+
+      card.innerHTML = `
+        <div class="card-title" style="margin-bottom:4px;">
+          ${p.name || p.id}
+          ${
+            isCurrent
+              ? '<span class="badge" style="margin-left:6px;background:#eef2ff;color:#4f46e5;font-size:11px;padding:2px 6px;border-radius:999px;">Текущий</span>'
+              : ''
+          }
+        </div>
+        <div class="card-subtitle" style="min-height:40px;">
+          ${p.description || 'Без описания'}
+        </div>
+        <div class="field" style="margin-top:8px;">
+          <div class="small">Стоимость: <strong>${price || 'по договорённости'}</strong></div>
+          <div class="small">Калькуляторов: <strong>${p.maxCalculators}</strong></div>
+          <div class="small">Лимит заявок: <strong>${leadsLimit ? leadsLimit : '∞'}</strong></div>
+          <div class="small">Лимит расчётов: <strong>${calcsLimit ? calcsLimit : '∞'}</strong></div>
+        </div>
+        <div class="field" style="margin-top:8px;">
+          <button type="button" class="btn primary btn-choose-plan" data-plan-id="${p.id}" ${
+            isCurrent ? 'disabled' : ''
+          }>
+            ${isCurrent ? 'Текущий тариф' : 'Выбрать тариф'}
+          </button>
+        </div>
+      `;
+
+      grid.appendChild(card);
+    });
+  }
+
   root.appendChild(plansCard);
 
   contentEl.innerHTML = '';
   contentEl.appendChild(root);
 
-  const grid = plansCard.querySelector('#plan-grid');
+  // обработка Telegram chat id
+  const tgIdInput = root.querySelector('#billing-tg-chat-id');
+  const tgSaveBtn = root.querySelector('#billing-tg-chat-save');
+  if (tgIdInput && tgSaveBtn && user) {
+    if (user.telegramChatId) {
+      tgIdInput.value = String(user.telegramChatId);
+    }
 
-  plans.forEach((plan) => {
-    const isCurrent = currentPlan && currentPlan.id === plan.id;
+    tgSaveBtn.addEventListener('click', async () => {
+      const val = tgIdInput.value.trim();
+      if (!val) {
+        if (!confirm('Очистить Telegram ID?')) return;
+      }
 
-    const card = document.createElement('div');
-    card.className = 'card plan-card' + (isCurrent ? ' plan-card--current' : '');
-    card.style.marginBottom = '0';
-
-   const pLeadsLimitNum =
-  typeof plan.maxLeads === 'number' && plan.maxLeads > 0
-    ? plan.maxLeads
-    : null;
-const pLeadsLimitText = pLeadsLimitNum ? pLeadsLimitNum : '∞';
-
-const pCalcsLimitNum =
-  typeof plan.maxCalcs === 'number' && plan.maxCalcs > 0
-    ? plan.maxCalcs
-    : (pLeadsLimitNum ? pLeadsLimitNum * 2 : null);
-const pCalcsLimitText = pCalcsLimitNum ? pCalcsLimitNum : '∞';
-
-card.innerHTML = `
-  <div class="card-title">${plan.name}</div>
-  ${isCurrent ? '<div class="plan-card-badge">Текущий тариф</div>' : ''}
-  <div class="card-subtitle">${plan.description}</div>
-  <p class="plan-card-price">${plan.price.toLocaleString('ru-RU')} ₽ / месяц</p>
-  <p class="plan-card-meta">
-    Калькуляторов: до ${plan.maxCalculators}, заявок: до ${pLeadsLimitText}, расчётов: до ${pCalcsLimitText}.
-  </p>
-  <div style="margin-top:8px;">
-    <button class="btn primary plan-select-btn" data-plan-id="${plan.id}" ${isCurrent ? 'disabled' : ''}>
-      ${isCurrent ? 'Текущий тариф' : 'Перейти на тариф'}
-    </button>
-  </div>
-`;
-
-
-    grid.appendChild(card);
-  });
-
-  grid.querySelectorAll('.plan-select-btn').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const planId = btn.dataset.planId;
-      if (!planId) return;
       try {
-        btn.disabled = true;
-        btn.textContent = 'Смена тарифа...';
-        await postJSON('/me/plan', { planId });
-        await renderBilling();
-        await refreshMeAndHeader();
+        tgSaveBtn.disabled = true;
+        tgSaveBtn.textContent = 'Сохранение...';
+
+        await fetch(buildApiUrl('/me/telegram'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId: val }),
+        });
+
+        // локально обновим currentMe, если он есть
+        if (currentMe && currentMe.user) {
+          currentMe.user.telegramChatId = val || null;
+        }
+
+        alert('Telegram ID сохранён');
       } catch (err) {
         console.error(err);
-        alert('Не удалось сменить тариф');
-        btn.disabled = false;
-        btn.textContent = 'Перейти на тариф';
+        alert('Не удалось сохранить Telegram ID');
+      } finally {
+        tgSaveBtn.disabled = false;
+        tgSaveBtn.textContent = 'Сохранить';
+      }
+    });
+  }
+
+  // пока делаем кнопки "демо" для смены тарифа
+  root.querySelectorAll('.btn-choose-plan').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const planId = btn.getAttribute('data-plan-id');
+      if (!planId) return;
+
+      if (!me || !me.user) {
+        alert('Нет данных о текущем пользователе');
+        return;
+      }
+
+      if (!confirm('Переключить тариф на план: ' + planId + '?')) {
+        return;
+      }
+
+      const u = me.user;
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Переключаем...';
+
+        const body = {
+          name: u.name || '',
+          email: u.email || '',
+          role: u.role || 'user',
+          planId: planId,
+          planActive: true,
+        };
+
+        const res = await fetch(
+          buildApiUrl('/admin/users/' + encodeURIComponent(u.id)),
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }
+        );
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || 'HTTP ' + res.status);
+        }
+
+        // обновляем /me и шапку
+        const updatedMe = await fetchJSON('/me');
+        currentMe = updatedMe;
+        updateHeaderFromMe(updatedMe);
+
+        // перерисовываем биллинг
+        await renderBilling();
+      } catch (err) {
+        console.error(err);
+        alert('Не удалось сменить тариф: ' + (err.message || err));
       }
     });
   });
@@ -795,7 +950,7 @@ async function renderAdminUsers() {
         const u = usersData.find((x) => x.id === id);
         if (!u) return;
         selectedUser = u;
-        renderEditForm(true); // открыть форму и сфокусироваться на пароле
+        renderEditForm(true);
       });
     });
   }
@@ -997,13 +1152,11 @@ async function renderCalculators() {
 
   const items = (data && data.items) || [];
 
-  // planActive берём из me.user.planActive, по умолчанию считаем "активен"
   const meUser = me && me.user ? me.user : null;
   planActive = !meUser || meUser.planActive !== false;
 
   const root = document.createElement('div');
 
-  // баннер, если тариф не активен
   if (!planActive) {
     const banner = document.createElement('div');
     banner.className = 'card';
@@ -1106,7 +1259,6 @@ async function renderCalculators() {
         const calcCount =
           typeof c.calcCount === 'number' ? c.calcCount : 0;
 
-        // формируем публичную ссылку
         const publicPath =
           c.publicPath ||
           (c.publicToken && c.ownerId
@@ -1145,10 +1297,13 @@ async function renderCalculators() {
                 : ''
             }
           </div>
-          <div>
-            <button class="btn secondary" type="button"${
+          <div class="calc-item-actions" style="display:flex; flex-direction:column; gap:4px;">
+            <button class="btn secondary btn-open" type="button"${
               !planActive ? ' disabled' : ''
             }>Открыть</button>
+            <button class="btn secondary btn-delete" type="button">
+              Удалить
+            </button>
           </div>
         `;
 
@@ -1156,7 +1311,9 @@ async function renderCalculators() {
           row.style.opacity = '0.5';
         }
 
-        const openBtn = row.querySelector('button.btn.secondary');
+        const openBtn = row.querySelector('.btn-open');
+        const deleteBtn = row.querySelector('.btn-delete');
+
         openBtn.addEventListener('click', () => {
           if (!planActive) {
             currentSection = 'billing';
@@ -1181,6 +1338,42 @@ async function renderCalculators() {
                 (CALC_TYPE_LABELS[c.type] || c.type) +
                 '" пока в разработке.'
             );
+          }
+        });
+
+        deleteBtn.addEventListener('click', async () => {
+          if (!confirm(`Удалить калькулятор "${c.name}"?`)) return;
+
+          try {
+            deleteBtn.disabled = true;
+            deleteBtn.textContent = 'Удаление...';
+
+            const res = await fetch(
+              buildApiUrl('/calculators?id=' + encodeURIComponent(c.id)),
+              { method: 'DELETE' }
+            );
+
+            if (!res.ok) {
+              let msg = 'Не удалось удалить калькулятор';
+              try {
+                const txt = await res.text();
+                if (txt) msg += ': ' + txt;
+              } catch (_) {}
+              alert(msg);
+              return;
+            }
+
+            const idx = items.findIndex((x) => x.id === c.id);
+            if (idx !== -1) {
+              items.splice(idx, 1);
+            }
+            renderList();
+          } catch (err) {
+            console.error(err);
+            alert('Ошибка удаления калькулятора');
+          } finally {
+            deleteBtn.disabled = false;
+            deleteBtn.textContent = 'Удалить';
           }
         });
 
@@ -1231,6 +1424,7 @@ async function renderCalculators() {
           <button type="button" class="calc-type-btn" data-type="layered">Послойный</button>
           <button type="button" class="calc-type-btn" data-type="distance">Расчёт доставки</button>
           <button type="button" class="calc-type-btn" data-type="on_site">Выезд замерщика</button>
+          <button type="button" class="calc-type-btn" data-type="mortgage">Ипотека</button>
         </div>
         <p class="small">Тип влияет на логику и интерфейс конечного калькулятора.</p>
       </div>
@@ -1670,7 +1864,6 @@ function renderDistanceBuilder(cfg, calcMeta) {
     resultBox.style.display = 'none';
   }
 
-  // Leaflet карта
   let distanceMap = null;
   let routeLayer = null;
 
@@ -1690,7 +1883,7 @@ function renderDistanceBuilder(cfg, calcMeta) {
       return;
     }
 
-    const latlngs = route.map(p => [p.lat, p.lon]).filter(arr => arr[0] && arr[1]);
+    const latlngs = route.map((p) => [p.lat, p.lon]).filter((arr) => arr[0] && arr[1]);
     if (!latlngs.length) {
       return;
     }
@@ -1742,10 +1935,8 @@ function renderDistanceBuilder(cfg, calcMeta) {
       resultLoad.textContent = formatMoney(res.priceLoad || 0);
       resultTotal.textContent = formatMoney(res.priceTotal || 0);
 
-      // маршрут на карте
       initMapIfNeeded(res.route || []);
 
-      // обновляем /me, чтобы calcsUsed в шапке сразу изменился
       refreshMeAndHeader();
     } catch (err) {
       console.error(err);
@@ -1776,7 +1967,6 @@ function renderDistanceBuilder(cfg, calcMeta) {
 function renderLayersBuilder(cfg, calcMeta) {
   contentEl.innerHTML = '';
 
-  // Если редактор открыт "из калькуляторов" — покажем шапку с инфой о калькуляторе
   if (calcMeta) {
     const infoCard = document.createElement('div');
     infoCard.className = 'card';
@@ -1793,11 +1983,12 @@ function renderLayersBuilder(cfg, calcMeta) {
     const calcCount =
       typeof calcMeta.calcCount === 'number' ? calcMeta.calcCount : 0;
 
-    // публичная ссылка, если есть
-    const publicPath = calcMeta.publicPath || (calcMeta.publicToken && calcMeta.ownerId
-      ? `/p/${calcMeta.ownerId}/${calcMeta.publicToken}`
-      : '');
-    const publicUrl = publicPath ? (window.location.origin + publicPath) : '';
+    const publicPath =
+      calcMeta.publicPath ||
+      (calcMeta.publicToken && calcMeta.ownerId
+        ? `/p/${calcMeta.ownerId}/${calcMeta.publicToken}`
+        : '');
+    const publicUrl = publicPath ? window.location.origin + publicPath : '';
 
     infoCard.innerHTML = `
       <div class="card-title">${calcMeta.name || 'Послойный калькулятор'}</div>
@@ -1807,7 +1998,9 @@ function renderLayersBuilder(cfg, calcMeta) {
       <p class="small" style="margin-top:4px;">
         ID: ${calcMeta.id}, создан: ${created}, расчётов: ${calcCount}.
       </p>
-      ${publicUrl ? `
+      ${
+        publicUrl
+          ? `
         <div class="field" style="margin-top:8px;">
           <label class="field-label">Публичная ссылка</label>
           <div style="display:flex; gap:6px; align-items:center;">
@@ -1818,7 +2011,9 @@ function renderLayersBuilder(cfg, calcMeta) {
             </button>
           </div>
         </div>
-      ` : ''}
+      `
+          : ''
+      }
     `;
 
     contentEl.appendChild(infoCard);

@@ -12,6 +12,7 @@ const (
 	CalculatorTypeLayered  CalculatorType = "layered"
 	CalculatorTypeDistance CalculatorType = "distance"
 	CalculatorTypeOnSite   CalculatorType = "on_site"
+	CalculatorTypeMortgage CalculatorType = "mortgage"
 )
 
 // Calculator — описание калькулятора в системе

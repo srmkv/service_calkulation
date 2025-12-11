@@ -4,226 +4,181 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
 	"saas-calc-backend/internal/domain"
 )
 
+// структура запроса на обновление пользователя из фронта
+type adminUpdateUserRequest struct {
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Role       string `json:"role"`
+	PlanID     string `json:"planId"`
+	PlanActive bool   `json:"planActive"`
+}
+
+// DTO для ответа — пользователь + его план
 type adminUserDTO struct {
-	ID         string        `json:"id"`
-	Email      string        `json:"email"`
-	Name       string        `json:"name"`
-	Role       string        `json:"role"`
-	Plan       *domain.Plan  `json:"plan,omitempty"`
-	PlanActive bool          `json:"planActive"`
-	CreatedAt  time.Time     `json:"createdAt"`
+	*domain.User        `json:",inline"`
+	Plan         *domain.Plan `json:"plan,omitempty"`
 }
 
-// requireAdmin — проверка, что текущий пользователь админ
-func (e *Env) requireAdmin(w http.ResponseWriter, r *http.Request) (*domain.User, bool) {
-	u := e.CurrentUser(r)
-	if u == nil {
-		http.Error(w, "user not found", http.StatusUnauthorized)
-		return nil, false
-	}
-	if u.Role != domain.RoleAdmin {
-		http.Error(w, "forbidden", http.StatusForbidden)
-		return nil, false
-	}
-	return u, true
-}
-
-// GET /api/admin/users  — список пользователей (только админ)
+// GET /api/admin/users
 func (e *Env) HandleAdminUsers(w http.ResponseWriter, r *http.Request) {
+	cur := e.CurrentUser(r)
+	if cur == nil || cur.Role != domain.RoleAdmin {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	_, ok := e.requireAdmin(w, r)
-	if !ok {
+	users, err := e.ListUsers(r.Context())
+	if err != nil {
+		http.Error(w, "failed to list users: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	list := make([]adminUserDTO, 0, len(e.Users))
-	for _, u := range e.Users {
-		var plan *domain.Plan
+	resp := make([]adminUserDTO, 0, len(users))
+	for _, u := range users {
+		dto := adminUserDTO{User: u}
 		if u.PlanID != "" {
-			plan = domain.FindPlan(e.Plans, u.PlanID)
+			dto.Plan = domain.FindPlan(e.Plans, u.PlanID)
 		}
-		list = append(list, adminUserDTO{
-			ID:         u.ID,
-			Email:      u.Email,
-			Name:       u.Name,
-			Role:       string(u.Role),
-			Plan:       plan,
-			PlanActive: u.PlanActive,
-			CreatedAt:  u.CreatedAt,
-		})
+		resp = append(resp, dto)
 	}
 
-	e.writeJSON(w, list)
+	e.writeJSON(w, resp)
 }
 
-// HandleAdminUserDetail обслуживает:
-//  PUT /api/admin/users/{id}          — обновление
-//  DELETE /api/admin/users/{id}       — удаление
-//  POST /api/admin/users/{id}/password — смена пароля
+// /api/admin/users/{id}
+// /api/admin/users/{id}/password
 func (e *Env) HandleAdminUserDetail(w http.ResponseWriter, r *http.Request) {
-	admin, ok := e.requireAdmin(w, r)
-	if !ok {
+	cur := e.CurrentUser(r)
+	if cur == nil || cur.Role != domain.RoleAdmin {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
 	const prefix = "/api/admin/users/"
-	rest := strings.TrimPrefix(r.URL.Path, prefix)
-	if rest == "" || rest == r.URL.Path {
+	if !strings.HasPrefix(r.URL.Path, prefix) {
 		http.NotFound(w, r)
 		return
 	}
+	rest := strings.TrimPrefix(r.URL.Path, prefix) // "{id}" или "{id}/password"
 
 	parts := strings.Split(rest, "/")
-	userID := parts[0]
-
-	// ищем пользователя
-	var user *domain.User
-	var idx int
-	for i, u := range e.Users {
-		if u.ID == userID {
-			user = u
-			idx = i
-			break
+	if len(parts) == 1 {
+		// /api/admin/users/{id}  -> PUT (update), DELETE
+		id := parts[0]
+		switch r.Method {
+		case http.MethodPut:
+			e.handleAdminUserUpdate(w, r, id)
+		case http.MethodDelete:
+			e.handleAdminUserDelete(w, r, id)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
+		return
 	}
-	if user == nil {
+
+	if len(parts) == 2 && parts[1] == "password" {
+		// /api/admin/users/{id}/password  -> POST (смена пароля)
+		id := parts[0]
+		e.handleAdminUserPassword(w, r, id)
+		return
+	}
+
+	http.NotFound(w, r)
+}
+
+func (e *Env) handleAdminUserUpdate(w http.ResponseWriter, r *http.Request, id string) {
+	defer r.Body.Close()
+
+	u, err := e.GetUserByID(r.Context(), id)
+	if err != nil {
+		http.Error(w, "failed to load user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if u == nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	// смена пароля
-	if len(parts) == 2 && parts[1] == "password" {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		e.handleAdminUserPassword(w, r, user)
-		return
-	}
-
-	// операции над самим пользователем
-	switch r.Method {
-	case http.MethodPut:
-		e.handleAdminUserUpdate(w, r, user)
-	case http.MethodDelete:
-		// нельзя удалить самого себя
-		if user.ID == admin.ID {
-			http.Error(w, "нельзя удалить текущего администратора", http.StatusBadRequest)
-			return
-		}
-		// нельзя удалить последнего админа
-		adminCount := 0
-		for _, u := range e.Users {
-			if u.Role == domain.RoleAdmin {
-				adminCount++
-			}
-		}
-		if user.Role == domain.RoleAdmin && adminCount <= 1 {
-			http.Error(w, "нельзя удалить последнего администратора", http.StatusBadRequest)
-			return
-		}
-
-		e.Users = append(e.Users[:idx], e.Users[idx+1:]...)
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-type updateUserRequest struct {
-	Email      *string `json:"email,omitempty"`
-	Name       *string `json:"name,omitempty"`
-	Role       *string `json:"role,omitempty"`
-	PlanID     *string `json:"planId,omitempty"`
-	PlanActive *bool   `json:"planActive,omitempty"`
-}
-
-func (e *Env) handleAdminUserUpdate(w http.ResponseWriter, r *http.Request, user *domain.User) {
-	defer r.Body.Close()
-
-	var req updateUserRequest
+	var req adminUpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if req.Email != nil {
-		user.Email = *req.Email
+	if req.Email == "" {
+		http.Error(w, "email is required", http.StatusBadRequest)
+		return
 	}
-	if req.Name != nil {
-		user.Name = *req.Name
+	if req.Role != "admin" && req.Role != "user" {
+		http.Error(w, "invalid role", http.StatusBadRequest)
+		return
 	}
-	if req.Role != nil {
-		switch *req.Role {
-		case "admin":
-			user.Role = domain.RoleAdmin
-		case "user":
-			user.Role = domain.RoleUser
-		default:
-			http.Error(w, "unknown role", http.StatusBadRequest)
-			return
-		}
-	}
-	if req.PlanID != nil {
-		if *req.PlanID != "" && domain.FindPlan(e.Plans, *req.PlanID) == nil {
-			http.Error(w, "unknown planId", http.StatusBadRequest)
-			return
-		}
-		user.PlanID = *req.PlanID
-	}
-	if req.PlanActive != nil {
-		user.PlanActive = *req.PlanActive
+	if req.PlanID != "" && domain.FindPlan(e.Plans, req.PlanID) == nil {
+		http.Error(w, "unknown planId", http.StatusBadRequest)
+		return
 	}
 
-	var plan *domain.Plan
-	if user.PlanID != "" {
-		plan = domain.FindPlan(e.Plans, user.PlanID)
+	u.Name = req.Name
+	u.Email = req.Email
+	u.Role = domain.Role(req.Role)
+	u.PlanID = req.PlanID
+	u.PlanActive = req.PlanActive
+
+	if err := e.UpdateUser(r.Context(), u); err != nil {
+		http.Error(w, "failed to update user: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	dto := adminUserDTO{
-		ID:         user.ID,
-		Email:      user.Email,
-		Name:       user.Name,
-		Role:       string(user.Role),
-		Plan:       plan,
-		PlanActive: user.PlanActive,
-		CreatedAt:  user.CreatedAt,
+		User: u,
+	}
+	if u.PlanID != "" {
+		dto.Plan = domain.FindPlan(e.Plans, u.PlanID)
 	}
 
 	e.writeJSON(w, dto)
 }
 
-type changePasswordRequest struct {
-	Password string `json:"password"`
+func (e *Env) handleAdminUserDelete(w http.ResponseWriter, r *http.Request, id string) {
+	if err := e.DeleteUser(r.Context(), id); err != nil {
+		http.Error(w, "failed to delete user: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
-func (e *Env) handleAdminUserPassword(w http.ResponseWriter, r *http.Request, user *domain.User) {
-	defer r.Body.Close()
+func (e *Env) handleAdminUserPassword(w http.ResponseWriter, r *http.Request, id string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-	var req changePasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	defer r.Body.Close()
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-
-	if strings.TrimSpace(req.Password) == "" {
+	if body.Password == "" {
 		http.Error(w, "password is required", http.StatusBadRequest)
+		return;
+	}
+
+	if err := e.SetUserPassword(r.Context(), id, body.Password); err != nil {
+		http.Error(w, "failed to set password: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// В демо просто сохраняем как есть
-	user.Password = req.Password
-
-	e.writeJSON(w, map[string]string{
-		"status": "ok",
-	})
+	w.WriteHeader(http.StatusNoContent)
 }

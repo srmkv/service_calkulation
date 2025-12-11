@@ -11,6 +11,7 @@ import (
 )
 
 // /p/{userId}/{token}
+// /p/{userId}/{token}
 func (e *Env) HandlePublicCalculatorPage(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/p/")
 	parts := strings.Split(path, "/")
@@ -34,6 +35,13 @@ func (e *Env) HandlePublicCalculatorPage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// 🔢 НОВОЕ: учитываем открытие публичной страницы layer-калькулятора
+	// distance уже считает реальные расчёты через /api/distance/calc,
+	// поэтому здесь специально ограничиваемся только layered.
+	if calc.Type == domain.CalculatorTypeLayered {
+		e.IncrementCalcCount(calc.ID)
+	}
+
 	switch calc.Type {
 	case domain.CalculatorTypeLayered:
 		cfg := e.LayeredConfig
@@ -52,11 +60,288 @@ func (e *Env) HandlePublicCalculatorPage(w http.ResponseWriter, r *http.Request)
 	case domain.CalculatorTypeDistance:
 		// публичный виджет расчёта доставки
 		renderDistancePublic(w, calc)
+	case domain.CalculatorTypeMortgage: 
+	renderMortgagePublic(w, calc)
 
 	default:
 		// простая заглушка для остальных типов
 		renderPublicStub(w, calc)
 	}
+}
+
+// публичный виджет для ипотечного калькулятора
+func renderMortgagePublic(w http.ResponseWriter, calc *domain.Calculator) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	name := calc.Name
+	if strings.TrimSpace(name) == "" {
+		name = "Ипотечный калькулятор"
+	}
+	escName := template.HTMLEscapeString(name)
+	idHTML := template.HTMLEscapeString(calc.ID)
+	idJS := template.JSEscapeString(calc.ID)
+
+	fmt.Fprintf(w, `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <title>%s – калькулятор ипотеки</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+    .widget-root {
+      max-width: 480px;
+      margin: 0 auto;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 16px 18px;
+      box-shadow: 0 10px 30px rgba(15,23,42,0.15);
+    }
+    .card-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .card-subtitle {
+      font-size: 13px;
+      color: #6b7280;
+      margin-bottom: 10px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 10px;
+      font-size: 11px;
+      background: #eef2ff;
+      color: #4f46e5;
+      margin-bottom: 8px;
+    }
+    .meta {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 6px;
+    }
+    .field { margin-bottom: 10px; }
+    .field-label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    input[type="number"] {
+      width: 100%%;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid #d1d5db;
+      font-size: 14px;
+      outline: none;
+    }
+    input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 1px rgba(99,102,241,0.3);
+    }
+    .btn {
+      border-radius: 999px;
+      border: none;
+      padding: 8px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: #4f46e5;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #4338ca;
+    }
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+
+    .result-box {
+      border-radius: 12px;
+      background: #f9fafb;
+      padding: 10px 12px;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    .result-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    .result-label {
+      color: #6b7280;
+    }
+    .result-value {
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="widget-root">
+    <div class="card">
+      <div class="badge">Публичная ссылка</div>
+      <div class="card-title">%s</div>
+      <div class="card-subtitle">
+        Простой расчёт ежемесячного платежа по ипотеке.
+      </div>
+
+      <form id="mortgage-form">
+        <div class="field">
+          <label class="field-label">Сумма кредита, ₽</label>
+          <input type="number" id="m-amount" min="0" step="10000" value="3900000" />
+        </div>
+        <div class="field">
+          <label class="field-label">Ставка, %% годовых</label>
+          <input type="number" id="m-rate" min="0" step="0.1" value="10.5" />
+        </div>
+        <div class="field">
+          <label class="field-label">Срок, лет</label>
+          <input type="number" id="m-years" min="1" max="40" step="1" value="30" />
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
+          <button type="submit" class="btn btn-primary">
+            <span>💰</span>
+            <span>Рассчитать</span>
+          </button>
+          <button type="button" id="m-reset" class="btn btn-secondary">Сбросить</button>
+        </div>
+      </form>
+
+      <div class="meta">
+        ID калькулятора: %s
+      </div>
+
+      <div id="m-error" style="margin-top:8px; font-size:13px; color:#b91c1c; display:none;"></div>
+
+      <div id="m-result" class="result-box" style="display:none;">
+        <div class="result-row">
+          <div class="result-label">Ежемесячный платёж</div>
+          <div class="result-value" id="m-monthly">—</div>
+        </div>
+        <div class="result-row">
+          <div class="result-label">Всего выплат</div>
+          <div class="result-value" id="m-total">—</div>
+        </div>
+        <div class="result-row">
+          <div class="result-label">Переплата</div>
+          <div class="result-value" id="m-over">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      const calculatorId = %q;
+
+      function formatMoney(num) {
+        return Math.round(num).toLocaleString('ru-RU') + ' ₽';
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('mortgage-form');
+        const amountInput = document.getElementById('m-amount');
+        const rateInput   = document.getElementById('m-rate');
+        const yearsInput  = document.getElementById('m-years');
+        const resetBtn    = document.getElementById('m-reset');
+
+        const errBox   = document.getElementById('m-error');
+        const resBox   = document.getElementById('m-result');
+        const monthlyEl = document.getElementById('m-monthly');
+        const totalEl   = document.getElementById('m-total');
+        const overEl    = document.getElementById('m-over');
+
+        function showError(msg) {
+          errBox.textContent = msg;
+          errBox.style.display = 'block';
+        }
+        function hideError() {
+          errBox.textContent = '';
+          errBox.style.display = 'none';
+        }
+        function hideResult() {
+          resBox.style.display = 'none';
+        }
+
+        form.addEventListener('submit', async function(e) {
+          e.preventDefault();
+          hideError();
+
+          const amount = Number(amountInput.value || 0);
+          const rate   = Number(rateInput.value || 0);
+          const years  = Number(yearsInput.value || 0);
+
+          if (!amount || !rate || !years) {
+            showError('Заполните сумму, ставку и срок.');
+            return;
+          }
+
+          try {
+            const res = await fetch('/api/mortgage/calc', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                amount: amount,
+                rate: rate,
+                years: years,
+                calculatorId: calculatorId
+              })
+            });
+
+            if (!res.ok) {
+              const text = await res.text();
+              showError('Ошибка расчёта: ' + (text || ('HTTP ' + res.status)));
+              hideResult();
+              return;
+            }
+
+            const data = await res.json();
+
+            resBox.style.display = 'block';
+            monthlyEl.textContent = formatMoney(data.monthly || 0);
+            totalEl.textContent   = formatMoney(data.total || 0);
+            overEl.textContent    = formatMoney(data.overpayment || 0);
+          } catch (err) {
+            console.error(err);
+            showError('Не удалось выполнить расчёт. Попробуйте ещё раз.');
+            hideResult();
+          }
+        });
+
+        resetBtn.addEventListener('click', function() {
+          amountInput.value = '';
+          rateInput.value   = '10.5';
+          yearsInput.value  = '30';
+          hideError();
+          hideResult();
+        });
+      });
+    })();
+  </script>
+</body>
+</html>`,
+		escName,
+		escName,
+		idHTML,
+		idJS,
+	)
 }
 
 // простая заглушка для других типов

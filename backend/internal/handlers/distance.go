@@ -293,6 +293,18 @@ func (e *Env) HandleDistanceCalc(w http.ResponseWriter, r *http.Request) {
 	// инкрементируем счётчик расчётов, если передан calculatorId
 	if req.CalculatorID != "" {
 		e.IncrementCalcCount(req.CalculatorID)
+
+		// и отправляем уведомление в Telegram (если у владельца есть chat_id и токен)
+		e.NotifyTelegramDistanceCalc(
+			r.Context(),
+			req.CalculatorID,
+			req.From,
+			req.To,
+			req.Vehicle,
+			req.RoundTrip,
+			resp.DistanceTotalKm,
+			resp.PriceTotal,
+		)
 	}
 
 	e.writeJSON(w, resp)

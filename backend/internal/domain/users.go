@@ -18,7 +18,7 @@ type User struct {
 	PlanID     string    `json:"planId"`
 	PlanActive bool      `json:"planActive"` // активен ли тариф (подписка)
 	CreatedAt  time.Time `json:"createdAt"`
-
+    TelegramChatID string `json:"telegramChatId"`
 	Password string `json:"-"` // для смены пароля (в демо, без хэшей)
 }
 

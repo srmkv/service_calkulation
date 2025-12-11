@@ -8,7 +8,7 @@ type Plan struct {
 	Price          float64 `json:"price"`
 	MaxCalculators int     `json:"maxCalculators"`
 	MaxLeads       int     `json:"maxLeads"`
-	MaxCalcs       int    `json:"maxCalcs"` 
+	MaxCalcs       int     `json:"maxCalcs"`
 }
 
 // DefaultPlans возвращает три базовых тарифа
@@ -21,6 +21,7 @@ func DefaultPlans() []Plan {
 			Price:          990,
 			MaxCalculators: 2,
 			MaxLeads:       200,
+			MaxCalcs:       400,   // в 2 раза больше заявок
 		},
 		{
 			ID:             "pro",
@@ -29,6 +30,7 @@ func DefaultPlans() []Plan {
 			Price:          2990,
 			MaxCalculators: 10,
 			MaxLeads:       2000,
+			MaxCalcs:       4000,  // в 2 раза больше заявок
 		},
 		{
 			ID:             "max",
@@ -37,6 +39,7 @@ func DefaultPlans() []Plan {
 			Price:          7990,
 			MaxCalculators: 999,
 			MaxLeads:       100000,
+			MaxCalcs:       200000, // в 2 раза больше заявок
 		},
 	}
 }
