@@ -18,8 +18,10 @@ type MeResponse struct {
 	LeadsUsed int `json:"leadsUsed"` // сколько заявок уже создано пользователем
 	CalcsUsed int `json:"calcsUsed"` // сколько расчётов уже сделано
 }
+
 type changeTelegramRequest struct {
-    ChatID string `json:"chatId"`
+	TelegramChatID string `json:"telegramChatId"`
+	ChatID         string `json:"chatId"`
 }
 
 // HandleMe — отдаёт информацию о текущем пользователе и тарифах.
@@ -59,42 +61,48 @@ func (e *Env) HandleMe(w http.ResponseWriter, r *http.Request) {
 type changePlanRequest struct {
 	PlanID string `json:"planId"`
 }
-// POST /api/me/telegram { "chatId": "123456789" }
+
+// POST /api/me/telegram { "chatId": "123456789" } или { "telegramChatId": "123456789" }
 func (e *Env) HandleMeTelegram(w http.ResponseWriter, r *http.Request) {
-    if r.Method != http.MethodPost {
-        http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-        return
-    }
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 
-    u := e.CurrentUser(r)
-    if u == nil {
-        http.Error(w, "user not found", http.StatusUnauthorized)
-        return
-    }
+	u := e.CurrentUser(r)
+	if u == nil {
+		http.Error(w, "user not found", http.StatusUnauthorized)
+		return
+	}
 
-    defer r.Body.Close()
-    var req changeTelegramRequest
-    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-        http.Error(w, "bad json: "+err.Error(), http.StatusBadRequest)
-        return
-    }
+	defer r.Body.Close()
+	var req changeTelegramRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 
-    chatID := strings.TrimSpace(req.ChatID)
-    u.TelegramChatID = chatID
+	// поддерживаем оба варианта поля: chatId и telegramChatId
+	chatID := strings.TrimSpace(req.ChatID)
+	if chatID == "" {
+		chatID = strings.TrimSpace(req.TelegramChatID)
+	}
 
-    if e.DB != nil {
-        if _, err := e.DB.ExecContext(
-            r.Context(),
-            `UPDATE users SET telegram_chat_id = $1 WHERE id = $2`,
-            chatID, u.ID,
-        ); err != nil {
-            http.Error(w, "failed to update telegram id: "+err.Error(), http.StatusInternalServerError)
-            return
-        }
-    }
+	u.TelegramChatID = chatID
 
-    // сразу отдаём обновлённый /me
-    e.HandleMe(w, r)
+	if e.DB != nil {
+		if _, err := e.DB.ExecContext(
+			r.Context(),
+			`UPDATE users SET telegram_chat_id = $1 WHERE id = $2`,
+			chatID, u.ID,
+		); err != nil {
+			http.Error(w, "failed to update telegram id: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// сразу отдаём обновлённый /me
+	e.HandleMe(w, r)
 }
 
 // POST /api/me/plan  { "planId": "pro" }
@@ -172,7 +180,6 @@ func (e *Env) HandleMePlan(w http.ResponseWriter, r *http.Request) {
 	// и сразу отдаём обновлённое состояние /me
 	e.HandleMe(w, r)
 }
-
 
 // usageForUser — считает использованные заявки/расчёты для конкретного пользователя.
 // Сначала пытается взять данные из БД (если Env.DB != nil), иначе падает в in-memory логику по e.Calculators.

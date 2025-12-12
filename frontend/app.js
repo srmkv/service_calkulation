@@ -371,7 +371,8 @@ async function renderSettings() {
       </div>
       <div class="field">
         <label class="field-label">Telegram bot token</label>
-        <input type="password" id="tg-bot-token-input" placeholder="123456:ABC-DEF..." />
+       <input type="text" id="tg-bot-token-input" placeholder="123456:ABC-DEF..." />
+
         <p class="small">
           Токен вашего Telegram-бота из @BotFather. Используется для отправки уведомлений
           с результатами расчётов.
@@ -477,6 +478,8 @@ async function renderBilling() {
   const currentPlan = (me && me.plan) || null;
   const leadsUsed = typeof me.leadsUsed === 'number' ? me.leadsUsed : 0;
   const calcsUsed = typeof me.calcsUsed === 'number' ? me.calcsUsed : 0;
+  const userTelegramChatId =
+  user && (user.telegramChatId || user.tgChatId || '');
 
   plans = Array.isArray(plans) ? plans : [];
 
@@ -559,6 +562,51 @@ async function renderBilling() {
   }
 
   root.appendChild(currentCard);
+     // --- Telegram ID в биллинге ---
+  const tgChatInput = document.getElementById('billing-tg-chat-id');
+  const tgChatSaveBtn = document.getElementById('billing-tg-chat-save');
+
+  if (tgChatInput && typeof userTelegramChatId === 'string') {
+    tgChatInput.value = userTelegramChatId;
+  }
+
+  if (tgChatInput && tgChatSaveBtn && user && user.id) {
+    tgChatSaveBtn.addEventListener('click', async () => {
+      const chatId = tgChatInput.value.trim();
+      if (!chatId) {
+        if (!confirm('Оставить Telegram ID пустым? Уведомления приходить не будут.')) {
+          return;
+        }
+      }
+
+      try {
+        tgChatSaveBtn.disabled = true;
+        tgChatSaveBtn.textContent = 'Сохраняем...';
+
+        const res = await fetch(buildApiUrl('/me/telegram'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telegramChatId: chatId }),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || ('HTTP ' + res.status));
+        }
+
+        const updatedMe = await res.json();
+        currentMe = updatedMe;
+        updateHeaderFromMe(updatedMe);
+        alert('Telegram ID сохранён');
+      } catch (err) {
+        console.error(err);
+        alert('Не удалось сохранить Telegram ID: ' + (err.message || err));
+      } finally {
+        tgChatSaveBtn.disabled = false;
+        tgChatSaveBtn.textContent = 'Сохранить';
+      }
+    });
+  }
 
   // --- список доступных тарифов ---
 

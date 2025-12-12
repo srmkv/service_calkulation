@@ -11,15 +11,15 @@ const (
 
 // User описывает клиента/админа SaaS
 type User struct {
-	ID         string    `json:"id"`
-	Email      string    `json:"email"`
-	Name       string    `json:"name"`
-	Role       Role      `json:"role"`
-	PlanID     string    `json:"planId"`
-	PlanActive bool      `json:"planActive"` // активен ли тариф (подписка)
-	CreatedAt  time.Time `json:"createdAt"`
-    TelegramChatID string `json:"telegramChatId"`
-	Password string `json:"-"` // для смены пароля (в демо, без хэшей)
+	ID             string    `json:"id"`
+	Email          string    `json:"email"`
+	Name           string    `json:"name"`
+	Role           Role      `json:"role"`
+	PlanID         string    `json:"planId"`
+	PlanActive     bool      `json:"planActive"` // активен ли тариф (подписка)
+	CreatedAt      time.Time `json:"createdAt"`
+	TelegramChatID string    `json:"telegramChatId"`
+	Password       string    `json:"-"` // для смены пароля (в демо, без хэшей)
 }
 
 // MockUsers — моковые пользователи под демо

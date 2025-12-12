@@ -10,7 +10,7 @@ type MortgageCalcRequest struct {
 	Amount       float64 `json:"amount"`       // сумма кредита
 	Rate         float64 `json:"rate"`         // годовая ставка, %
 	Years        int     `json:"years"`        // срок в годах
-	CalculatorID string  `json:"calculatorId"` // ID калькулятора для счётчика
+	CalculatorID string  `json:"calculatorId"` // ID калькулятора для счётчика и Telegram
 }
 
 type MortgageCalcResponse struct {
@@ -54,15 +54,26 @@ func (e *Env) HandleMortgageCalc(w http.ResponseWriter, r *http.Request) {
 	total := payment * n
 	over := total - req.Amount
 
-	// инкремент счётчика
-	if req.CalculatorID != "" {
-		e.IncrementCalcCount(req.CalculatorID)
-	}
-
 	resp := MortgageCalcResponse{
 		Monthly:     math.Round(payment*100) / 100,
 		Total:       math.Round(total*100) / 100,
 		Overpayment: math.Round(over*100) / 100,
+	}
+
+	// инкремент счётчика + Telegram-уведомление
+	if req.CalculatorID != "" {
+		e.IncrementCalcCount(req.CalculatorID)
+
+		e.NotifyTelegramMortgageCalc(
+			r.Context(),
+			req.CalculatorID,
+			req.Amount,
+			req.Rate,
+			req.Years,
+			resp.Monthly,
+			resp.Total,
+			resp.Overpayment,
+		)
 	}
 
 	e.writeJSON(w, resp)

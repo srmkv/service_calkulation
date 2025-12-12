@@ -11,6 +11,14 @@ import (
 	"saas-calc-backend/internal/domain"
 )
 
+// Settings — конфигурация сервисов маршрутизации и Telegram-бота,
+// которая хранится в таблице settings (одна строка с id = 1).
+type Settings struct {
+	OSRMBaseURL      string
+	NominatimBaseURL string
+	TelegramBotToken string
+}
+
 // OpenDBFromEnv открывает PostgreSQL по DSN из переменной окружения SAAS_PG_DSN.
 // Пример DSN: postgres://user:pass@localhost:5432/saas?sslmode=disable
 func OpenDBFromEnv() (*sql.DB, error) {
@@ -35,18 +43,48 @@ func ensureSchema(db *sql.DB) error {
 		return nil
 	}
 
+	// --- settings ---
+	if _, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS settings (
+    id                  INTEGER PRIMARY KEY,
+    osrm_base_url       TEXT,
+    nominatim_base_url  TEXT,
+    telegram_bot_token  TEXT
+);
+`); err != nil {
+		return err
+	}
+
+	// гарантируем, что запись с id = 1 существует
+	if _, err := db.Exec(`
+INSERT INTO settings (id)
+VALUES (1)
+ON CONFLICT (id) DO NOTHING;
+`); err != nil {
+		return err
+	}
+
 	// --- users ---
 	if _, err := db.Exec(`
 CREATE TABLE IF NOT EXISTS users (
-    id            TEXT PRIMARY KEY,
-    email         TEXT NOT NULL,
-    name          TEXT NOT NULL,
-    role          TEXT NOT NULL,          -- admin / user
-    password_hash TEXT NOT NULL DEFAULT '',
-    plan_id       TEXT NOT NULL,
-    plan_active   BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    id               TEXT PRIMARY KEY,
+    email            TEXT NOT NULL,
+    name             TEXT NOT NULL,
+    role             TEXT NOT NULL,          -- admin / user
+    password_hash    TEXT NOT NULL DEFAULT '',
+    plan_id          TEXT NOT NULL,
+    plan_active      BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    telegram_chat_id TEXT
 );
+`); err != nil {
+		return err
+	}
+
+	// на случай уже существующей таблицы без telegram_chat_id
+	if _, err := db.Exec(`
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT;
 `); err != nil {
 		return err
 	}
@@ -166,4 +204,52 @@ ORDER BY price ASC, id ASC;
 	}
 
 	return plans, nil
+}
+
+// LoadSettings загружает настройки из таблицы settings (id = 1).
+func LoadSettings(ctx context.Context, db *sql.DB) (*Settings, error) {
+	if db == nil {
+		return nil, fmt.Errorf("db is nil")
+	}
+
+	row := db.QueryRowContext(ctx, `
+SELECT osrm_base_url, nominatim_base_url, telegram_bot_token
+FROM settings
+WHERE id = 1;
+`)
+
+	var s Settings
+	if err := row.Scan(&s.OSRMBaseURL, &s.NominatimBaseURL, &s.TelegramBotToken); err != nil {
+		if err == sql.ErrNoRows {
+			// настроек ещё нет — вернём пустую структуру
+			return &Settings{}, nil
+		}
+		return nil, err
+	}
+
+	return &s, nil
+}
+
+// SaveSettings сохраняет настройки в таблицу settings (id всегда = 1).
+func SaveSettings(ctx context.Context, db *sql.DB, s *Settings) error {
+	if db == nil {
+		return fmt.Errorf("db is nil")
+	}
+	if s == nil {
+		return fmt.Errorf("settings is nil")
+	}
+
+	_, err := db.ExecContext(ctx, `
+INSERT INTO settings (id, osrm_base_url, nominatim_base_url, telegram_bot_token)
+VALUES (1, $1, $2, $3)
+ON CONFLICT (id) DO UPDATE
+  SET osrm_base_url      = EXCLUDED.osrm_base_url,
+      nominatim_base_url = EXCLUDED.nominatim_base_url,
+      telegram_bot_token = EXCLUDED.telegram_bot_token;
+`,
+		s.OSRMBaseURL,
+		s.NominatimBaseURL,
+		s.TelegramBotToken,
+	)
+	return err
 }

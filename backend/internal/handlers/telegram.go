@@ -11,12 +11,34 @@ import (
     "time"
 )
 
+// читаем токен бота из БД (settings.id = 1), при ошибках — из Env
+func (e *Env) loadTelegramBotToken(ctx context.Context) string {
+    if e.DB == nil {
+        return strings.TrimSpace(e.TelegramBotToken)
+    }
+
+    var token sql.NullString
+    err := e.DB.QueryRowContext(
+        ctx,
+        `SELECT telegram_bot_token FROM settings WHERE id = 1`,
+    ).Scan(&token)
+    if err != nil {
+        if err != sql.ErrNoRows {
+            log.Printf("telegram: load token from db error: %v", err)
+        }
+        return strings.TrimSpace(e.TelegramBotToken)
+    }
+
+    return strings.TrimSpace(token.String)
+}
+
 // sendTelegramMessage — низкоуровневый отправитель сообщений
 func (e *Env) sendTelegramMessage(ctx context.Context, chatID, text string) {
-    token := strings.TrimSpace(e.TelegramBotToken)
     chatID = strings.TrimSpace(chatID)
+    token := e.loadTelegramBotToken(ctx)
 
     if token == "" || chatID == "" {
+        log.Printf("telegram: skip send — empty bot token or chat id (token=%q, chatID=%q)", token, chatID)
         return
     }
 
@@ -34,21 +56,21 @@ func (e *Env) sendTelegramMessage(ctx context.Context, chatID, text string) {
         strings.NewReader(form.Encode()),
     )
     if err != nil {
-        log.Printf("telegram: build request: %v", err)
+        log.Printf("telegram: build request (token=%q): %v", token, err)
         return
     }
     req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-    client := &http.Client{Timeout: 5 * time.Second}
+    client := &http.Client{Timeout: 10 * time.Second}
     resp, err := client.Do(req)
     if err != nil {
-        log.Printf("telegram: send error: %v", err)
+        log.Printf("telegram: send error (token=%q): %v", token, err)
         return
     }
     defer resp.Body.Close()
 
     if resp.StatusCode >= 300 {
-        log.Printf("telegram: non-OK status: %s", resp.Status)
+        log.Printf("telegram: non-OK status %s (token=%q)", resp.Status, token)
     }
 }
 
@@ -94,7 +116,6 @@ func (e *Env) NotifyTelegramDistanceCalc(
         return
     }
     if chatID == "" {
-        // у владельца нет Telegram-ID — просто выходим
         return
     }
 
@@ -125,6 +146,60 @@ func (e *Env) NotifyTelegramDistanceCalc(
         totalPrice,
     )
 
-    // отправляем асинхронно, чтобы не блокировать ответ API
-    go e.sendTelegramMessage(ctx, chatID, text)
+    // ВАЖНО: не используем request-context, а отдельный фоновой контекст
+    go func() {
+        bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+        defer cancel()
+        e.sendTelegramMessage(bgCtx, chatID, text)
+    }()
+}
+
+// NotifyTelegramMortgageCalc — уведомление о новом расчёте ипотеки
+func (e *Env) NotifyTelegramMortgageCalc(
+    ctx context.Context,
+    calcID string,
+    amount float64,
+    rate float64,
+    years int,
+    monthly float64,
+    total float64,
+    overpayment float64,
+) {
+    chatID, calcName, calcType, err := e.lookupTelegramForCalc(ctx, calcID)
+    if err != nil {
+        log.Printf("telegram: lookup failed for calc %s: %v", calcID, err)
+        return
+    }
+    if chatID == "" {
+        return
+    }
+
+    if calcName == "" {
+        calcName = calcID
+    }
+
+    text := fmt.Sprintf(
+        "🏠 Новый расчёт ипотеки по калькулятору «%s» (%s)\n\n"+
+            "Сумма кредита: %.0f ₽\n"+
+            "Ставка: %.2f %% годовых\n"+
+            "Срок: %d лет\n\n"+
+            "Ежемесячный платёж: %.0f ₽\n"+
+            "Всего выплат: %.0f ₽\n"+
+            "Переплата: %.0f ₽",
+        calcName,
+        calcType,
+        amount,
+        rate,
+        years,
+        monthly,
+        total,
+        overpayment,
+    )
+
+    // тоже отправляем на фоне с независимым контекстом
+    go func() {
+        bgCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+        defer cancel()
+        e.sendTelegramMessage(bgCtx, chatID, text)
+    }()
 }
